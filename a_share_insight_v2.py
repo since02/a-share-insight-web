@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-备用接口 + 本地缓存兜底版
-指数：腾讯  
-涨跌/两融/北向/板块/ETF：新浪 + 东财 + 缓存
+AI 决策 + ETF 评分 全面替代版
+数据源：腾讯 + 新浪 + 东财  纯 requests
+GitHub Actions 无风控，空数据保底
 """
 import os
 import requests
@@ -45,7 +45,7 @@ def get_index_tx(market: str = 'sh'):
             return pd.read_pickle(cache_file)
         return pd.DataFrame(columns=['day', 'close', 'amount']).astype({'close': float, 'amount': float})
 
-# ② 涨跌家数（新浪保底）
+# ② 涨跌家数（新浪）
 def get_market_activity_sina():
     url = 'https://vip.stock.finance.sina.com.cn/quotesService/view/qInfo.php?format=json&node=adratio'
     try:
@@ -54,7 +54,18 @@ def get_market_activity_sina():
     except Exception:
         return 0, 0
 
-# ③ 融资融券（新浪）
+# ③ 板块涨跌（腾讯）
+def get_sector_tx():
+    url = 'http://web.ifzq.gtimg.cn/appstock/app/hq/get?type=bd&callback='
+    try:
+        r = requests.get(url, timeout=10).json()
+        bk = pd.DataFrame(r['data']['bd'])[['n', 'zd']].head(10)
+        bk.columns = ['name', 'zd']
+        return bk
+    except Exception:
+        return pd.DataFrame(columns=['name', 'zd'])
+
+# ④ 融资融券（新浪）
 def get_margin_sina():
     try:
         sh = requests.get('https://vip.stock.finance.sina.com.cn/quotesService/view/qInfo.php?format=json&node=margin', timeout=10).json()
@@ -65,7 +76,7 @@ def get_margin_sina():
     except Exception:
         return 15800.0, 0.0   # 兜底常数
 
-# ④ 北向资金（东财）
+# ⑤ 北向资金（东财）
 def get_north_money_em():
     try:
         url = 'http://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f51,f53&ut=b2884a393a59ad64002292a3e90d46a5'
@@ -75,7 +86,7 @@ def get_north_money_em():
     except Exception:
         return 0.0
 
-# ⑤ ETF 技术评分（模拟+缓存）
+# ⑥ ETF 技术评分（模拟+缓存）
 def get_etf_tech_cached():
     cache_file = os.path.join(CACHE_DIR, 'etf_tech.pkl')
     if os.path.exists(cache_file):
@@ -113,7 +124,7 @@ def get_etf_tech_cached():
     df.to_pickle(cache_file)
     return df
 
-# ⑥ AI 结论（规则模拟，可换火山）
+# ⑦ AI 结论（规则模拟，可换火山）
 def ai_conclusion(data: dict):
     liquidity = data['liquidity']
     sentiment = data['sentiment']
