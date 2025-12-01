@@ -33,7 +33,10 @@ jobs:
           MODEL: ${{ secrets.MODEL }}
         run: |
           mkdir -p reports
-          python a_share_insight.py
+          for i in {1..3}; do
+            echo "===== 第 $i 次尝试 ====="
+            python a_share_insight.py && break || sleep 15
+          done
 
       - name: Upload report artifact
         uses: actions/upload-pages-artifact@v3
