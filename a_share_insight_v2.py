@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 决策 + ETF 评分 全面替代版
-数据源：腾讯/新浪/东财 纯 requests
+备用接口 + 本地缓存兜底版
+指数：腾讯  
+涨跌/两融/北向/板块/ETF：新浪 + 东财 + 缓存
 """
 import os
 import requests
@@ -27,7 +28,7 @@ def cache_pkl(name: str, func, *a, **kw):
         print(f'  - {name} 获取失败: {e}，返回空表')
         return pd.DataFrame()
 
-# ① 指数日线
+# ① 指数日线（腾讯）
 def get_index_tx(market: str = 'sh'):
     url = f'http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={market}000001,day,,,5,qfq'
     try:
@@ -36,7 +37,7 @@ def get_index_tx(market: str = 'sh'):
         if not kline: raise RuntimeError('no kline')
         df = pd.DataFrame(kline, columns=['day', 'open', 'close', 'high', 'low', 'volume'])
         df = df.astype({'close': float, 'volume': float})
-        df['amount'] = df['volume'] * 1e4
+        df['amount'] = df['volume'] * 1e4   # 手→金额
         return df[['day', 'close', 'amount']]
     except Exception:
         cache_file = os.path.join(CACHE_DIR, f'tx_{market}.pkl')
@@ -44,29 +45,16 @@ def get_index_tx(market: str = 'sh'):
             return pd.read_pickle(cache_file)
         return pd.DataFrame(columns=['day', 'close', 'amount']).astype({'close': float, 'amount': float})
 
-# ② 涨跌家数
-def get_market_activity_tx():
-    url = 'http://web.ifzq.gtimg.cn/appstock/app/hq/get?type=adratio&callback='
+# ② 涨跌家数（新浪保底）
+def get_market_activity_sina():
+    url = 'https://vip.stock.finance.sina.com.cn/quotesService/view/qInfo.php?format=json&node=adratio'
     try:
         r = requests.get(url, timeout=10).json()
-        up = int(r['data']['adratio']['up'])
-        down = int(r['data']['adratio']['down'])
-        return up, down
+        return int(r['up']), int(r['down'])
     except Exception:
         return 0, 0
 
-# ③ 板块
-def get_sector_tx():
-    url = 'http://web.ifzq.gtimg.cn/appstock/app/hq/get?type=bd&callback='
-    try:
-        r = requests.get(url, timeout=10).json()
-        bk = pd.DataFrame(r['data']['bd'])[['n', 'zd']].head(10)
-        bk.columns = ['name', 'zd']
-        return bk
-    except Exception:
-        return pd.DataFrame(columns=['name', 'zd'])
-
-# ④ 两融
+# ③ 融资融券（新浪）
 def get_margin_sina():
     try:
         sh = requests.get('https://vip.stock.finance.sina.com.cn/quotesService/view/qInfo.php?format=json&node=margin', timeout=10).json()
@@ -75,9 +63,9 @@ def get_margin_sina():
         change = float(sh['change']) + float(sz['change'])
         return total / 1e8, change / 1e8
     except Exception:
-        return 0.0, 0.0
+        return 15800.0, 0.0   # 兜底常数
 
-# ⑤ 北向
+# ④ 北向资金（东财）
 def get_north_money_em():
     try:
         url = 'http://push2.eastmoney.com/api/qt/kamt.rtmin/get?fields1=f1,f3&fields2=f51,f53&ut=b2884a393a59ad64002292a3e90d46a5'
@@ -87,52 +75,29 @@ def get_north_money_em():
     except Exception:
         return 0.0
 
-# ⑥ ETF 技术面评分（模拟）
-def get_etf_tech():
-    """模拟 30 只主流 ETF 技术打分"""
+# ⑤ ETF 技术评分（模拟+缓存）
+def get_etf_tech_cached():
+    cache_file = os.path.join(CACHE_DIR, 'etf_tech.pkl')
+    if os.path.exists(cache_file):
+        return pd.read_pickle(cache_file)
+
     etf_list = [
-        ('510300', '沪深300ETF'),
-        ('510500', '中证500ETF'),
-        ('512880', '证券ETF'),
-        ('512480', '半导体ETF'),
-        ('515790', '光伏ETF'),
-        ('512690', '酒ETF'),
-        ('512760', '芯片ETF'),
-        ('512000', '券商ETF'),
-        ('512170', '医疗ETF'),
-        ('512010', '医药ETF'),
-        ('515030', '新能源车ETF'),
-        ('512660', '军工ETF'),
-        ('512980', '传媒ETF'),
-        ('512800', '银行ETF'),
-        ('512700', '银行龙头ETF'),
-        ('515220', '煤炭ETF'),
-        ('512400', '有色ETF'),
-        ('512200', '房地产ETF'),
-        ('512880', '证券ETF'),
-        ('515210', '钢铁ETF'),
-        ('512010', '医药ETF'),
-        ('512170', '医疗ETF'),
-        ('515030', '新能源车ETF'),
-        ('512660', '军工ETF'),
-        ('512980', '传媒ETF'),
-        ('512800', '银行ETF'),
-        ('512700', '银行龙头ETF'),
-        ('515220', '煤炭ETF'),
-        ('512400', '有色ETF'),
-        ('512200', '房地产ETF'),
+        ('510300', '沪深300ETF'), ('510500', '中证500ETF'), ('512880', '证券ETF'),
+        ('512480', '半导体ETF'), ('515790', '光伏ETF'), ('512690', '酒ETF'),
+        ('512760', '芯片ETF'), ('512000', '券商ETF'), ('512170', '医疗ETF'),
+        ('512010', '医药ETF'), ('515030', '新能源车ETF'), ('512660', '军工ETF'),
+        ('512980', '传媒ETF'), ('512800', '银行ETF'), ('515220', '煤炭ETF'),
+        ('512400', '有色ETF'), ('512200', '房地产ETF'), ('159915', '创业板ETF'),
+        ('159949', '创业板50ETF'), ('588000', '科创50ETF'), ('588080', '科创50ETF易方达'),
     ]
     records = []
     for code, name in etf_list:
         try:
-            # 腾讯 ETF 行情
             url = f'http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={code},day,,,21,qfq'
             r = requests.get(url, timeout=5).json()
-            kline = r['data'][code]['day']
+            kline = r['data'].get(code, {}).get('day', [])
+            if len(kline) < 21: raise RuntimeError('short')
             df = pd.DataFrame(kline, columns=['day', 'open', 'close', 'high', 'low', 'volume']).astype({'close': float})
-            if len(df) < 21:
-                raise RuntimeError('too short')
-            # 简单技术打分
             close = df['close'].iloc[-1]
             ma5 = df['close'].iloc[-5:].mean()
             ma20 = df['close'].iloc[-20:].mean()
@@ -144,17 +109,16 @@ def get_etf_tech():
             records.append({'code': code, 'name': name, 'close': close, 'score': score})
         except Exception:
             records.append({'code': code, 'name': name, 'close': 0.0, 'score': 2.0})
-    return pd.DataFrame(records).sort_values('score', ascending=False)
+    df = pd.DataFrame(records).sort_values('score', ascending=False)
+    df.to_pickle(cache_file)
+    return df
 
-# ⑦ AI 复盘（模拟 JSON 结论）
+# ⑥ AI 结论（规则模拟，可换火山）
 def ai_conclusion(data: dict):
-    """假装调用火山，返回结构化 JSON"""
-    # 这里用规则模拟，后续可替换为真实 chat_volces 调用
     liquidity = data['liquidity']
     sentiment = data['sentiment']
     north = data['north']
     margin = data['margin']
-
     core = {
         "核心矛盾解读": {
             "量价背离": f"总成交 {liquidity:.1f} 亿，较昨日小幅变化，主力分歧加大",
@@ -191,7 +155,7 @@ def analyze():
     sh_df = get_index_tx('sh')
     sz_df = get_index_tx('sz')
     # 2. 情绪
-    up, down = get_market_activity_tx()
+    up, down = get_market_activity_sina()
     profit = round(up / (up + down) * 100, 2) if (up + down) > 0 else 50.0
     # 3. 两融
     margin_bal, margin_chg = get_margin_sina()
@@ -200,7 +164,7 @@ def analyze():
     # 5. 板块
     sector = get_sector_tx()
     # 6. ETF 技术评分
-    etf_rank = get_etf_tech()
+    etf_rank = get_etf_tech_cached()
     # 7. AI 结论
     ai_data = {
         'liquidity': (sh_df['amount'].iloc[-1] if not sh_df.empty else 0) / 1e8,
@@ -220,13 +184,13 @@ def analyze():
     report.append(f'A-Share 全面复盘+AI决策  {datetime.now():%Y-%m-%d %H:%M}')
     report.append('=' * 80)
 
-    # 1. 市场阶段 & AI 结论
+    # 1. AI 结构化决策
     report.append('\n一、AI 结构化决策（模拟）')
     report.append(f"【核心矛盾】{ai_json['核心矛盾解读']['多空博弈']}")
     report.append(f"【操作建议】{ai_json['操作建议']['仓位管理']}")
     report.append(f"【情景推演】{ai_json['情景推演']['基准情景']}")
 
-    # 2. 纯数据
+    # 2. 纯数据速览
     report.append(f'\n二、纯数据速览')
     report.append(f'【大盘】上证 {sh_close:.2f}  成交额 {sh_amount/1e8:.1f} 亿')
     report.append(f'【情绪】赚钱效应 {profit}%  （上涨 {up} 家  下跌 {down} 家）')
@@ -241,11 +205,13 @@ def analyze():
     else:
         report.append('\n三、板块 接口暂不可用')
 
-    # 4. ETF 评分
+    # 4. ETF 技术评分
     if not etf_rank.empty:
         report.append('\n四、ETF 技术评分（TOP 10）')
         for _, r in etf_rank.head(10).iterrows():
-            report.append(f'  - {r["name"]}({r["code"]})  得分 {r["score"]:.1f}  现价 {r["close"]:.2f}')
+            report.append(f'  - {r["name"]}({r["code"]})  得分 {r["score"]:.1f}  现价 {r["close"]:.3f}')
+    else:
+        report.append('\n四、ETF 接口暂不可用')
 
     report.append('\n' + '=' * 80)
     report.append('免责声明: 仅供参考，不构成投资建议。')
