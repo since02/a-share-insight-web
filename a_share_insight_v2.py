@@ -41,7 +41,7 @@ def analyze():
     sh_df = get_index_daily('1.000001', 5)      # 上证 5 日
     sz_df = get_index_daily('0.399001', 5)      # 深证 5 日
     up, down = get_up_down_count()
-   板块 = get_main_fund()
+    ban_kuai = get_main_fund()
 
     # 拼报告
     report = []
@@ -51,7 +51,7 @@ def analyze():
     report.append(f'\n【大盘】上证最新 {sh_df["close"].iloc[-1]:.2f}  成交额 {sh_df["amount"].iloc[-1]/1e8:.1f} 亿')
     report.append(f'【涨跌】上涨 {up} 家  下跌 {down} 家')
     report.append('\n【板块主力净流入 TOP5】')
-    for _, r in 板块.head(5).iterrows():
+    for _, r in ban_kuai.head(5).iterrows():
         report.append(f'  - {r["name"]}  {r["zdf"]:.2f}%  {r["zljlr"]/1e8:.1f} 亿')
     report.append('\n' + '=' * 80)
     full_text = '\n'.join(report)
