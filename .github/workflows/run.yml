@@ -1,0 +1,44 @@
+name: Run A-Share Insight and Deploy to Pages
+
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 8 * * 1-5'  # 工作日早8点运行（UTC）
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          VOLCES_API_KEY: ${{ secrets.VOLCES_API_KEY }}
+          MODEL: ${{ secrets.MODEL }}
+        run: |
+          mkdir -p reports
+          python a_share_insight.py
+
+      - name: Upload report artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: reports
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
