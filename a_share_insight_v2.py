@@ -10,16 +10,19 @@ from datetime import datetime
 
 # ---------- 工具 ----------
 def get_sina_daily(symbol: str = 's_sh000001'):
-    """新浪指数日K  symbol: s_sh000001 上证  s_sz399001 深证"""
+    """新浪指数近5日  symbol: s_sh000001 上证  s_sz399001 深证"""
     url = f'https://quotes.sina.cn/cn/api/jsonp.php/var_{symbol}=/CN_MarketDataService.getKLineData?symbol={symbol}&scale=240&ma=5&datalen=5'
     r = requests.get(url, timeout=10).text
-    # 正则抽 JSON
     import re, json
     json_str = re.search(r'\((.*?)\)', r).group(1)
-    data = json.loads(json_str)
-    df = pd.DataFrame(data)[['day', 'open', 'close', 'high', 'low', 'volume']]
+    data = json.loads(json_str)          # list[dict]
+    # 字段实际名：day open close high low volume
+    df = pd.DataFrame(data)
+    # 如果字段名变化，用位置兜底
+    df = df.iloc[:, :6]                  # 前6列就是 day/open/close/high/low/volume
+    df.columns = ['day', 'open', 'close', 'high', 'low', 'volume']
     df = df.astype({'close': float, 'volume': float})
-    df['amount'] = df['volume'] * 1e4   # 新浪 volume 是手，换算成金额近似
+    df['amount'] = df['volume'] * 1e4    # 手→金额近似
     return df
 
 def get_up_down_count():
