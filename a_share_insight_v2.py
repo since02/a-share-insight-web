@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI 决策 + ETF 评分 全面替代版
-数据源：腾讯 + 新浪 + 东财  纯 requests
-GitHub Actions 无风控，空数据保底
+备用接口 + 本地缓存兜底版
+指数：腾讯  
+涨跌/两融/北向/板块/ETF：新浪 + 东财 + 缓存
 """
 import os
 import requests
@@ -45,7 +45,7 @@ def get_index_tx(market: str = 'sh'):
             return pd.read_pickle(cache_file)
         return pd.DataFrame(columns=['day', 'close', 'amount']).astype({'close': float, 'amount': float})
 
-# ② 涨跌家数（新浪）
+# ② 涨跌家数（新浪保底）
 def get_market_activity_sina():
     url = 'https://vip.stock.finance.sina.com.cn/quotesService/view/qInfo.php?format=json&node=adratio'
     try:
