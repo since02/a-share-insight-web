@@ -777,7 +777,10 @@ class AdvancedStockAnalyzer:
  
         # 创建一个安全的文件名
         safe_time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        report_filename = os.path.join('../reports', f"A_Share_Report_{safe_time_str}.txt")
+        os.makedirs('reports', exist_ok=True)
+        report_filename = f"reports/index.html"
+        with open(report_filename, 'w', encoding='utf-8') as f:
+        f.write(f"<pre>{full_report_string}</pre>")
  
         try:
             with open(report_filename, 'w', encoding='utf-8') as f:
@@ -812,4 +815,5 @@ class AdvancedStockAnalyzer:
  
 if __name__ == "__main__":
     analyzer = AdvancedStockAnalyzer()
+
     analyzer.run_analysis()
